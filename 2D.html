@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>物理弹球消除 (VS Code 风格)</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1e1e1e;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #252526;
+            border: 1px solid #3c3c3c;
+            padding: 40px 60px;
+            text-align: center;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        h1 {
+            color: #cccccc;
+            font-size: 32px;
+            margin-top: 0;
+            font-weight: normal;
+        }
+
+        p.desc {
+            color: #858585;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .score-board {
+            color: #cca700;
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 12px 40px;
+            font-size: 16px;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0062a3;
+        }
+
+        button:active {
+            background-color: #004a7c;
+        }
+
+        #gameUI {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: none;
+            z-index: 5;
+        }
+
+        #scoreTxt {
+            position: absolute;
+            top: 40px;
+            width: 100%;
+            text-align: center;
+            color: #cccccc;
+            font-size: 36px;
+            font-weight: bold;
+        }
+
+        #timeTxt {
+            position: absolute;
+            top: 90px;
+            width: 100%;
+            text-align: center;
+            color: #007acc;
+            font-size: 24px;
+        }
+
+        #hintTxt {
+            position: absolute;
+            bottom: 40px;
+            width: 100%;
+            text-align: center;
+            color: #858585;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="gameUI">
+        <div id="scoreTxt">SCORE: 0</div>
+        <div id="timeTxt">TIME: 60s</div>
+        <div id="hintTxt">触屏引爆 | 努力堆叠同色小球</div>
+    </div>
+
+    <div id="menu">
+        <h1>物理弹球消除</h1>
+        <p class="desc">基于 Web 前端的硬核物理引擎渲染</p>
+        <div class="score-board" id="bestScoreTxt">历史最高分: 0</div>
+        <button onclick="startGame()">启动游戏</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let WIDTH, HEIGHT;
+        function resize() {
+            WIDTH = window.innerWidth;
+            HEIGHT = window.innerHeight;
+            canvas.width = WIDTH;
+            canvas.height = HEIGHT;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const MAX_BALLS = 250;
+        const COLORS = ['#FF4D4D', '#4D94FF', '#FFC300', '#33CC99'];
+
+        let bestScore = localStorage.getItem('physics_highscore') || 0;
+        document.getElementById('bestScoreTxt').innerText = `历史最高分: ${bestScore}`;
+
+        let currentScore = 0;
+        let timeLeft = 60;
+        let isPlaying = false;
+        let lastTime = 0;
+        let spawnTimer = 0;
+        let gameTimer = 0;
+
+        let balls = [];
+        let floatingTexts = [];
+
+        for (let i = 0; i < MAX_BALLS; i++) {
+            balls.push({
+                x: 0, y: 0, vx: 0, vy: 0, r: 0, mass: 0,
+                colorId: 0, isDead: true
+            });
+        }
+
+        function startGame() {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('gameUI').style.display = 'block';
+
+            currentScore = 0;
+            timeLeft = 60;
+            isPlaying = true;
+
+            document.getElementById('scoreTxt').innerText = `SCORE: ${currentScore}`;
+            document.getElementById('timeTxt').innerText = `TIME: ${timeLeft}s`;
+
+            for (let b of balls) b.isDead = true;
+            floatingTexts = [];
+
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            isPlaying = false;
+            if (currentScore > bestScore) {
+                bestScore = currentScore;
+                localStorage.setItem('physics_highscore', bestScore);
+            }
+            document.getElementById('bestScoreTxt').innerText = `历史最高分: ${bestScore}`;
+            document.getElementById('menu').style.display = 'block';
+            document.getElementById('gameUI').style.display = 'none';
+        }
+
+        function updatePhysics() {
+            const sub_steps = 8;
+            const dt = 1.0 / sub_steps;
+            const ax = 0.0, ay = 0.3;
+
+            let deltas = balls.map(() => ({ dx: 0, dy: 0 }));
+
+            for (let step = 0; step < sub_steps; step++) {
+
+                for (let i = 0; i < MAX_BALLS; i++) {
+                    let b = balls[i];
+                    if (b.isDead) continue;
+                    deltas[i].dx = b.vx * dt + 0.5 * ax * dt * dt;
+                    deltas[i].dy = b.vy * dt + 0.5 * ay * dt * dt;
+                    b.vx += ax * dt;
+                    b.vy += ay * dt;
+                    b.vx *= 0.9998;
+                    b.vy *= 0.9998;
+                }
+
+                for (let i = 0; i < MAX_BALLS; i++) {
+                    let b1 = balls[i];
+                    if (b1.isDead) continue;
+
+                    for (let j = i + 1; j < MAX_BALLS; j++) {
+                        let b2 = balls[j];
+                        if (b2.isDead) continue;
+
+                        let dp_x = b2.x - b1.x, dp_y = b2.y - b1.y;
+                        let dd_x = deltas[j].dx - deltas[i].dx, dd_y = deltas[j].dy - deltas[i].dy;
+                        let r_sum = b1.r + b2.r;
+
+                        let A = dd_x * dd_x + dd_y * dd_y;
+                        let B = 2.0 * (dp_x * dd_x + dp_y * dd_y);
+                        let C = dp_x * dp_x + dp_y * dp_y - r_sum * r_sum;
+
+                        let t_hit = -1.0;
+                        if (C < 0) t_hit = 0.0;
+                        else if (A > 0.0001) {
+                            let disc = B * B - 4.0 * A * C;
+                            if (disc >= 0) {
+                                let t_root = (-B - Math.sqrt(disc)) / (2.0 * A);
+                                if (t_root >= 0.0 && t_root <= 1.0) t_hit = t_root;
+                            }
+                        }
+
+                        if (t_hit >= 0.0 && t_hit <= 1.0) {
+                            if (b1.colorId === b2.colorId) {
+                                b1.isDead = true; b2.isDead = true;
+
+                                currentScore += 15;
+                                document.getElementById('scoreTxt').innerText = `SCORE: ${currentScore}`;
+
+                                let mx = (b1.x + b2.x) / 2, my = (b1.y + b2.y) / 2;
+                                floatingTexts.push({ x: mx, y: my, life: 30, text: "+15" });
+                                continue;
+                            }
+
+                            let ex1 = b1.x + deltas[i].dx * t_hit, ey1 = b1.y + deltas[i].dy * t_hit;
+                            let ex2 = b2.x + deltas[j].dx * t_hit, ey2 = b2.y + deltas[j].dy * t_hit;
+
+                            let dx = ex2 - ex1, dy = ey2 - ey1;
+                            let dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist < 0.0001) dist = 0.0001;
+
+                            let nx = dx / dist, ny = dy / dist;
+                            let tx = -ny, ty = nx;
+
+                            let vel_along_normal = (b2.vx - b1.vx) * nx + (b2.vy - b1.vy) * ny;
+
+                            if (vel_along_normal < 0) {
+                                let e = Math.abs(vel_along_normal) < 0.5 ? 0.0 : 0.4;
+                                let j_imp = -(1.0 + e) * vel_along_normal / (1.0 / b1.mass + 1.0 / b2.mass);
+
+                                let vel_along_tangent = (b2.vx - b1.vx) * tx + (b2.vy - b1.vy) * ty;
+                                let jt = -vel_along_tangent / (1.0 / b1.mass + 1.0 / b2.mass);
+                                let mu = 0.5;
+                                if (jt > j_imp * mu) jt = j_imp * mu;
+                                else if (jt < -j_imp * mu) jt = -j_imp * mu;
+
+                                b1.vx -= (1.0 / b1.mass) * (j_imp * nx + jt * tx);
+                                b1.vy -= (1.0 / b1.mass) * (j_imp * ny + jt * ty);
+                                b2.vx += (1.0 / b2.mass) * (j_imp * nx + jt * tx);
+                                b2.vy += (1.0 / b2.mass) * (j_imp * ny + jt * ty);
+                            }
+                        }
+                    }
+                }
+
+                let wall_e = 0.4, ground_friction = 0.85;
+                for (let i = 0; i < MAX_BALLS; i++) {
+                    let b = balls[i];
+                    if (b.isDead) continue;
+
+                    let next_x = b.x + deltas[i].dx, next_y = b.y + deltas[i].dy;
+
+                    if (next_x - b.r < 0) { b.x = b.r; b.vx = Math.abs(b.vx) < 0.5 ? 0 : b.vx * -wall_e; b.vy *= ground_friction; }
+                    else if (next_x + b.r > WIDTH) { b.x = WIDTH - b.r; b.vx = Math.abs(b.vx) < 0.5 ? 0 : b.vx * -wall_e; b.vy *= ground_friction; }
+                    else b.x = next_x;
+
+                    if (next_y - b.r < 0) { b.y = b.r; b.vy = Math.abs(b.vy) < 0.5 ? 0 : b.vy * -wall_e; b.vx *= ground_friction; }
+                    else if (next_y + b.r > HEIGHT) { b.y = HEIGHT - b.r; b.vy = Math.abs(b.vy) < 0.5 ? 0 : b.vy * -wall_e; b.vx *= ground_friction; }
+                    else b.y = next_y;
+                }
+
+                for (let i = 0; i < MAX_BALLS; i++) {
+                    let b1 = balls[i];
+                    if (b1.isDead) continue;
+                    for (let j = i + 1; j < MAX_BALLS; j++) {
+                        let b2 = balls[j];
+                        if (b2.isDead) continue;
+
+                        let dx = b2.x - b1.x, dy = b2.y - b1.y;
+                        let dist_sq = dx * dx + dy * dy, min_dist = b1.r + b2.r;
+
+                        if (dist_sq > 0 && dist_sq < min_dist * min_dist) {
+                            let dist = Math.sqrt(dist_sq);
+                            let pen = min_dist - dist;
+                            let scalar = Math.max(pen - 0.02, 0.0) / (1.0 / b1.mass + 1.0 / b2.mass) * 0.2;
+
+                            if (dist < 0.0001) { dx = 1; dy = 0; dist = 1; }
+                            let nx = dx / dist, ny = dy / dist;
+
+                            b1.x -= (1.0 / b1.mass) * scalar * nx; b1.y -= (1.0 / b1.mass) * scalar * ny;
+                            b2.x += (1.0 / b2.mass) * scalar * nx; b2.y += (1.0 / b2.mass) * scalar * ny;
+                        }
+                    }
+                }
+            }
+
+            for (let b of balls) {
+                if (b.isDead) continue;
+                if (b.x < b.r) b.x = b.r; if (b.x > WIDTH - b.r) b.x = WIDTH - b.r;
+                if (b.y < b.r) b.y = b.r; if (b.y > HEIGHT - b.r) b.y = HEIGHT - b.r;
+            }
+        }
+
+        function spawnBall() {
+            for (let b of balls) {
+                if (b.isDead) {
+                    b.r = Math.random() * 20 + 25;
+                    b.mass = b.r * b.r;
+                    b.x = Math.random() * (WIDTH - b.r * 2) + b.r;
+                    b.y = -b.r * 2;
+                    b.vx = Math.random() * 6 - 3;
+                    b.vy = Math.random() * 4 + 2;
+                    b.colorId = Math.floor(Math.random() * COLORS.length);
+                    b.isDead = false;
+                    break;
+                }
+            }
+        }
+
+        function applyExplosion(x, y) {
+            if (!isPlaying) return;
+            for (let b of balls) {
+                if (b.isDead) continue;
+                let dx = b.x - x, dy = b.y - y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 1) dist = 1;
+                if (dist < 300) {
+                    let force = 180.0 * (1.0 - dist / 300.0);
+                    b.vx += (dx / dist) * force;
+                    b.vy += (dy / dist) * force;
+                }
+            }
+        }
+
+        // 【修复】将事件绑定到 canvas 上，防止误杀菜单按钮
+        canvas.addEventListener('mousedown', e => applyExplosion(e.clientX, e.clientY));
+        canvas.addEventListener('touchstart', e => {
+            if (isPlaying) {
+                e.preventDefault();
+                applyExplosion(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: false });
+
+        function gameLoop(timestamp) {
+            if (!isPlaying) return;
+
+            let delta = timestamp - lastTime;
+            lastTime = timestamp;
+
+            spawnTimer += delta;
+            if (spawnTimer > 150) {
+                spawnBall(); spawnBall();
+                spawnTimer = 0;
+            }
+
+            gameTimer += delta;
+            if (gameTimer > 1000) {
+                timeLeft--;
+                document.getElementById('timeTxt').innerText = `TIME: ${timeLeft}s`;
+                gameTimer = 0;
+                if (timeLeft <= 0) endGame();
+            }
+
+            updatePhysics();
+
+            ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+            for (let b of balls) {
+                if (b.isDead) continue;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+                ctx.fillStyle = COLORS[b.colorId];
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                let ft = floatingTexts[i];
+                ft.life--;
+                ft.y -= 2;
+                ctx.font = "bold 24px 'Segoe UI'";
+                ctx.fillStyle = `rgba(51, 204, 153, ${ft.life / 30})`;
+                ctx.textAlign = "center";
+                ctx.fillText(ft.text, ft.x, ft.y);
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+
+</html>
