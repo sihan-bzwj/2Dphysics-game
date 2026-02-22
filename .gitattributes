@@ -1,7 +1,11 @@
-# 将所有 .tex 文件伪装成二进制文件，彻底从代码统计中抹除
-*.tex binary
-*.tex -diff
+# 强制屏蔽所有 TeX 文件
+*.tex linguist-vendored
+*.tex linguist-documentation=true
+*.tex linguist-detectable=false
 
-# 确保核心代码以文本形式被精确识别
-*.cpp text linguist-detectable=true
-*.py text linguist-detectable=true
+index.html linguist-vendored
+index.html linguist-detectable=false
+
+# 显式声明核心代码
+*.cpp linguist-detectable=true
+*.py linguist-detectable=true
