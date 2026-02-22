@@ -3,8 +3,8 @@
 *.tex linguist-documentation=true
 *.tex linguist-detectable=false
 
-index.html linguist-vendored
-index.html linguist-detectable=false
+2D.html linguist-vendored
+2D.html linguist-detectable=false
 
 # 显式声明核心代码
 *.cpp linguist-detectable=true
