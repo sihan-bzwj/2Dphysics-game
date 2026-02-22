@@ -1,2 +1,7 @@
-# 告诉 GitHub 所有的 .tex 文件都是文档，不计入语言统计
-*.tex linguist-documentation
+# 彻底从语言统计中抹除所有 TeX 文件
+*.tex linguist-detectable=false
+*.tex linguist-documentation=true
+
+# 确保核心代码被 100% 识别
+*.cpp linguist-detectable=true
+*.py linguist-detectable=true
