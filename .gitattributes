@@ -1,0 +1,2 @@
+# 告诉 GitHub 所有的 .tex 文件都是文档，不计入语言统计
+*.tex linguist-documentation

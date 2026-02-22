@@ -3,9 +3,13 @@
 
 <head>
     <meta charset="UTF-8">
+    <!-- 移动端适配：禁止用户缩放，确保游戏画面 1:1 填充屏幕 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>物理弹球消除 (VS Code 风格)</title>
+
+    <!-- ==================== CSS 样式区域 ==================== -->
     <style>
+        /* ---- 全局重置：去除默认边距，铺满整个视窗 ---- */
         body,
         html {
             margin: 0;
@@ -13,33 +17,45 @@
             width: 100%;
             height: 100%;
             background-color: #1e1e1e;
+            /* VS Code 深色背景 */
             font-family: 'Segoe UI', Arial, sans-serif;
             overflow: hidden;
+            /* 禁止滚动条 */
             touch-action: none;
+            /* 禁止移动端默认触摸手势（如双指缩放） */
         }
 
+        /* ---- 游戏画布：撑满整个窗口 ---- */
         canvas {
             display: block;
             width: 100%;
             height: 100%;
         }
 
+        /* ---- 主菜单面板：绝对居中的浮层，VS Code 侧边栏配色 ---- */
         #menu {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            /* 利用 transform 实现完美居中 */
             background-color: #252526;
+            /* VS Code 侧边栏色 */
             border: 1px solid #3c3c3c;
+            /* VS Code 边框色 */
             padding: 40px 60px;
             text-align: center;
             border-radius: 8px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            /* 底部阴影增加层次感 */
             z-index: 10;
+            /* 确保菜单浮在画布之上 */
         }
 
+        /* ---- 菜单内文字样式 ---- */
         h1 {
             color: #cccccc;
+            /* VS Code 主文字色 */
             font-size: 32px;
             margin-top: 0;
             font-weight: normal;
@@ -47,18 +63,23 @@
 
         p.desc {
             color: #858585;
+            /* VS Code 次要文字色 */
             font-size: 14px;
             margin-bottom: 30px;
         }
 
+        /* ---- 历史最高分展示（黄色警告色） ---- */
         .score-board {
             color: #cca700;
+            /* VS Code 警告色 */
             font-size: 18px;
             margin-bottom: 30px;
         }
 
+        /* ---- 按钮样式：VS Code 蓝色主题 + 悬停/按下三态过渡 ---- */
         button {
             background-color: #007acc;
+            /* VS Code 品牌蓝 */
             color: white;
             border: none;
             padding: 12px 40px;
@@ -66,16 +87,20 @@
             border-radius: 2px;
             cursor: pointer;
             transition: background-color 0.2s;
+            /* 平滑过渡动画 */
         }
 
         button:hover {
             background-color: #0062a3;
+            /* 悬停：加深蓝 */
         }
 
         button:active {
             background-color: #004a7c;
+            /* 按下：更深蓝 */
         }
 
+        /* ---- 游戏中的 HUD 覆盖层（分数/时间/提示）---- */
         #gameUI {
             position: absolute;
             top: 0;
@@ -83,10 +108,13 @@
             width: 100%;
             height: 100%;
             pointer-events: none;
+            /* 透传鼠标事件，不阻挡画布交互 */
             display: none;
+            /* 默认隐藏，开始游戏后显示 */
             z-index: 5;
         }
 
+        /* ---- 分数文本：顶部居中，白色大字 ---- */
         #scoreTxt {
             position: absolute;
             top: 40px;
@@ -97,6 +125,7 @@
             font-weight: bold;
         }
 
+        /* ---- 倒计时文本：分数下方，蓝色标识 ---- */
         #timeTxt {
             position: absolute;
             top: 90px;
@@ -106,6 +135,7 @@
             font-size: 24px;
         }
 
+        /* ---- 底部提示文本：淡灰色，不抢眼 ---- */
         #hintTxt {
             position: absolute;
             bottom: 40px;
@@ -119,12 +149,14 @@
 
 <body>
 
+    <!-- ========== 游戏中 HUD 覆盖层（分数 / 时间 / 操作提示） ========== -->
     <div id="gameUI">
         <div id="scoreTxt">SCORE: 0</div>
         <div id="timeTxt">TIME: 60s</div>
         <div id="hintTxt">触屏引爆 | 努力堆叠同色小球</div>
     </div>
 
+    <!-- ========== 主菜单：标题 + 最高分 + 启动按钮 ========== -->
     <div id="menu">
         <h1>物理弹球消除</h1>
         <p class="desc">基于 Web 前端的硬核物理引擎渲染</p>
@@ -132,49 +164,65 @@
         <button onclick="startGame()">启动游戏</button>
     </div>
 
+    <!-- ========== 游戏主画布：所有小球在此绘制 ========== -->
     <canvas id="gameCanvas"></canvas>
 
     <script>
+        // ==================== JavaScript 游戏逻辑区域 ====================
+
+        // ---- 获取画布及 2D 绘图上下文 ----
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
+        // ---- 窗口自适应：确保画布分辨率与浏览器窗口保持同步 ----
         let WIDTH, HEIGHT;
         function resize() {
             WIDTH = window.innerWidth;
             HEIGHT = window.innerHeight;
-            canvas.width = WIDTH;
+            canvas.width = WIDTH;   // 设置画布像素宽度（非 CSS 宽度）
             canvas.height = HEIGHT;
         }
         window.addEventListener('resize', resize);
-        resize();
+        resize(); // 初始化时立即执行一次
 
-        const MAX_BALLS = 250;
-        const COLORS = ['#FF4D4D', '#4D94FF', '#FFC300', '#33CC99'];
+        // ---- 游戏常量 ----
+        const MAX_BALLS = 250;                                      // 小球对象池上限
+        const COLORS = ['#FF4D4D', '#4D94FF', '#FFC300', '#33CC99']; // 红、蓝、黄、绿 四种颜色
 
+        // ---- 从 localStorage 读取历史最高分 ----
         let bestScore = localStorage.getItem('physics_highscore') || 0;
         document.getElementById('bestScoreTxt').innerText = `历史最高分: ${bestScore}`;
 
-        let currentScore = 0;
-        let timeLeft = 60;
-        let isPlaying = false;
-        let lastTime = 0;
-        let spawnTimer = 0;
-        let gameTimer = 0;
+        // ---- 游戏运行时状态 ----
+        let currentScore = 0;   // 本局得分
+        let timeLeft = 60;      // 倒计时（秒）
+        let isPlaying = false;   // 是否正在游戏中
+        let lastTime = 0;       // 上一帧的时间戳（用于计算 delta）
+        let spawnTimer = 0;     // 生成小球的累计计时器（毫秒）
+        let gameTimer = 0;      // 倒计时秒数累计计时器（毫秒）
 
-        let balls = [];
-        let floatingTexts = [];
+        let balls = [];          // 小球对象池数组
+        let floatingTexts = [];  // 浮动得分文字动画数组
 
+        // ---- 初始化小球对象池：所有小球默认为 "死亡" 状态（不参与物理计算和渲染） ----
         for (let i = 0; i < MAX_BALLS; i++) {
             balls.push({
-                x: 0, y: 0, vx: 0, vy: 0, r: 0, mass: 0,
-                colorId: 0, isDead: true
+                x: 0, y: 0,       // 位置
+                vx: 0, vy: 0,     // 速度
+                r: 0, mass: 0,    // 半径和质量 (质量 = 半径²)
+                colorId: 0,       // 颜色索引 (0-3 对应 COLORS 数组)
+                isDead: true       // 死亡标记：true 表示未激活
             });
         }
 
+        /**
+         * 开始游戏：隐藏菜单 → 重置状态 → 启动主循环
+         */
         function startGame() {
-            document.getElementById('menu').style.display = 'none';
-            document.getElementById('gameUI').style.display = 'block';
+            document.getElementById('menu').style.display = 'none';    // 隐藏菜单
+            document.getElementById('gameUI').style.display = 'block'; // 显示 HUD
 
+            // 重置游戏状态
             currentScore = 0;
             timeLeft = 60;
             isPlaying = true;
@@ -182,44 +230,60 @@
             document.getElementById('scoreTxt').innerText = `SCORE: ${currentScore}`;
             document.getElementById('timeTxt').innerText = `TIME: ${timeLeft}s`;
 
+            // 清空所有小球和浮动文字
             for (let b of balls) b.isDead = true;
             floatingTexts = [];
 
+            // 启动游戏主循环
             lastTime = performance.now();
             requestAnimationFrame(gameLoop);
         }
 
+        /**
+         * 结束游戏：更新最高分 → 隐藏 HUD → 显示菜单
+         */
         function endGame() {
             isPlaying = false;
+            // 如果本局得分超过历史最高分，则更新并持久化
             if (currentScore > bestScore) {
                 bestScore = currentScore;
                 localStorage.setItem('physics_highscore', bestScore);
             }
             document.getElementById('bestScoreTxt').innerText = `历史最高分: ${bestScore}`;
-            document.getElementById('menu').style.display = 'block';
-            document.getElementById('gameUI').style.display = 'none';
+            document.getElementById('menu').style.display = 'block';   // 显示菜单
+            document.getElementById('gameUI').style.display = 'none';  // 隐藏 HUD
         }
 
+        /**
+         * 核心物理更新函数
+         * 采用子步进 (sub-stepping) 方法提高碰撞检测精度，
+         * 每帧被拆分为 8 个子步进，每步执行：
+         *   1) 速度积分（泰勒展开） 2) 连续碰撞检测(CCD) 3) 墙壁碰撞 4) 穿透修正
+         */
         function updatePhysics() {
-            const sub_steps = 8;
-            const dt = 1.0 / sub_steps;
-            const ax = 0.0, ay = 0.3;
+            const sub_steps = 8;                   // 子步进次数，越大精度越高但越耗性能
+            const dt = 1.0 / sub_steps;            // 每个子步进的时间步长
+            const ax = 0.0, ay = 0.3;              // 加速度：ax=0(无水平重力), ay=0.3(向下重力)
 
+            // 每个小球在当前子步进中的位移增量
             let deltas = balls.map(() => ({ dx: 0, dy: 0 }));
 
             for (let step = 0; step < sub_steps; step++) {
 
+                // ---- 步骤 1：速度积分 (泰勒二阶展开: Δx = v·dt + 0.5·a·dt²) ----
                 for (let i = 0; i < MAX_BALLS; i++) {
                     let b = balls[i];
-                    if (b.isDead) continue;
-                    deltas[i].dx = b.vx * dt + 0.5 * ax * dt * dt;
+                    if (b.isDead) continue;             // 跳过死亡小球
+                    deltas[i].dx = b.vx * dt + 0.5 * ax * dt * dt;  // 位移增量
                     deltas[i].dy = b.vy * dt + 0.5 * ay * dt * dt;
-                    b.vx += ax * dt;
+                    b.vx += ax * dt;                    // 更新速度
                     b.vy += ay * dt;
-                    b.vx *= 0.9998;
+                    b.vx *= 0.9998;                     // 空气阻力衰减
                     b.vy *= 0.9998;
                 }
 
+                // ---- 步骤 2：连续碰撞检测(CCD) + 同色消除 + 异色弹性碰撞 ----
+                // 利用二次方程 At² + Bt + C = 0 求解两球最早的碰撞时刻 t_hit
                 for (let i = 0; i < MAX_BALLS; i++) {
                     let b1 = balls[i];
                     if (b1.isDead) continue;
@@ -228,58 +292,70 @@
                         let b2 = balls[j];
                         if (b2.isDead) continue;
 
+                        // dp: 两球当前位置差; dd: 两球位移增量差
                         let dp_x = b2.x - b1.x, dp_y = b2.y - b1.y;
                         let dd_x = deltas[j].dx - deltas[i].dx, dd_y = deltas[j].dy - deltas[i].dy;
-                        let r_sum = b1.r + b2.r;
+                        let r_sum = b1.r + b2.r;          // 两球半径之和
 
+                        // 构造二次方程: |p(t)|² = r_sum² → A·t² + B·t + C = 0
                         let A = dd_x * dd_x + dd_y * dd_y;
                         let B = 2.0 * (dp_x * dd_x + dp_y * dd_y);
                         let C = dp_x * dp_x + dp_y * dp_y - r_sum * r_sum;
 
-                        let t_hit = -1.0;
-                        if (C < 0) t_hit = 0.0;
-                        else if (A > 0.0001) {
-                            let disc = B * B - 4.0 * A * C;
+                        let t_hit = -1.0;                 // 碰撞时刻，-1 表示无碰撞
+                        if (C < 0) t_hit = 0.0;           // C < 0 说明已经重叠，立即处理
+                        else if (A > 0.0001) {            // A ≈ 0 说明相对静止，无需检测
+                            let disc = B * B - 4.0 * A * C;   // 判别式
                             if (disc >= 0) {
-                                let t_root = (-B - Math.sqrt(disc)) / (2.0 * A);
+                                let t_root = (-B - Math.sqrt(disc)) / (2.0 * A); // 取较小根
                                 if (t_root >= 0.0 && t_root <= 1.0) t_hit = t_root;
                             }
                         }
 
                         if (t_hit >= 0.0 && t_hit <= 1.0) {
+                            // 【游戏核心】同色碰撞 → 双双消除，+15 分
                             if (b1.colorId === b2.colorId) {
                                 b1.isDead = true; b2.isDead = true;
 
                                 currentScore += 15;
                                 document.getElementById('scoreTxt').innerText = `SCORE: ${currentScore}`;
 
+                                // 在两球中点位置生成浮动得分文字
                                 let mx = (b1.x + b2.x) / 2, my = (b1.y + b2.y) / 2;
                                 floatingTexts.push({ x: mx, y: my, life: 30, text: "+15" });
                                 continue;
                             }
 
+                            // 【异色碰撞】回溯到精确碰撞位置
                             let ex1 = b1.x + deltas[i].dx * t_hit, ey1 = b1.y + deltas[i].dy * t_hit;
                             let ex2 = b2.x + deltas[j].dx * t_hit, ey2 = b2.y + deltas[j].dy * t_hit;
 
+                            // 计算碰撞法线（连心线方向）和切线
                             let dx = ex2 - ex1, dy = ey2 - ey1;
                             let dist = Math.sqrt(dx * dx + dy * dy);
-                            if (dist < 0.0001) dist = 0.0001;
+                            if (dist < 0.0001) dist = 0.0001; // 防止除零
 
-                            let nx = dx / dist, ny = dy / dist;
-                            let tx = -ny, ty = nx;
+                            let nx = dx / dist, ny = dy / dist;   // 法线方向单位向量
+                            let tx = -ny, ty = nx;                 // 切线方向单位向量
 
+                            // 法线方向相对速度
                             let vel_along_normal = (b2.vx - b1.vx) * nx + (b2.vy - b1.vy) * ny;
 
+                            // 只有两球相互接近时才处理（vel_along_normal < 0）
                             if (vel_along_normal < 0) {
+                                // 恢复系数：低速时完全不弹（防抖动），高速时 0.4 弹性
                                 let e = Math.abs(vel_along_normal) < 0.5 ? 0.0 : 0.4;
+                                // 法线方向冲量大小（考虑质量）
                                 let j_imp = -(1.0 + e) * vel_along_normal / (1.0 / b1.mass + 1.0 / b2.mass);
 
+                                // 切线方向摩擦冲量（库仑摩擦模型，摩擦系数 μ=0.5）
                                 let vel_along_tangent = (b2.vx - b1.vx) * tx + (b2.vy - b1.vy) * ty;
                                 let jt = -vel_along_tangent / (1.0 / b1.mass + 1.0 / b2.mass);
                                 let mu = 0.5;
-                                if (jt > j_imp * mu) jt = j_imp * mu;
+                                if (jt > j_imp * mu) jt = j_imp * mu;       // 钳制摩擦力
                                 else if (jt < -j_imp * mu) jt = -j_imp * mu;
 
+                                // 施加冲量到两球速度
                                 b1.vx -= (1.0 / b1.mass) * (j_imp * nx + jt * tx);
                                 b1.vy -= (1.0 / b1.mass) * (j_imp * ny + jt * ty);
                                 b2.vx += (1.0 / b2.mass) * (j_imp * nx + jt * tx);
@@ -289,6 +365,8 @@
                     }
                 }
 
+                // ---- 步骤 3：墙壁碰撞检测 ----
+                // wall_e: 墙壁恢复系数(0.4), ground_friction: 碰壁后切向摩擦衰减(0.85)
                 let wall_e = 0.4, ground_friction = 0.85;
                 for (let i = 0; i < MAX_BALLS; i++) {
                     let b = balls[i];
@@ -296,15 +374,19 @@
 
                     let next_x = b.x + deltas[i].dx, next_y = b.y + deltas[i].dy;
 
+                    // 左/右墙碰撞：钳制位置 + 速度反向衰减 + 切向摩擦
                     if (next_x - b.r < 0) { b.x = b.r; b.vx = Math.abs(b.vx) < 0.5 ? 0 : b.vx * -wall_e; b.vy *= ground_friction; }
                     else if (next_x + b.r > WIDTH) { b.x = WIDTH - b.r; b.vx = Math.abs(b.vx) < 0.5 ? 0 : b.vx * -wall_e; b.vy *= ground_friction; }
                     else b.x = next_x;
 
+                    // 上/下墙碰撞：同理
                     if (next_y - b.r < 0) { b.y = b.r; b.vy = Math.abs(b.vy) < 0.5 ? 0 : b.vy * -wall_e; b.vx *= ground_friction; }
                     else if (next_y + b.r > HEIGHT) { b.y = HEIGHT - b.r; b.vy = Math.abs(b.vy) < 0.5 ? 0 : b.vy * -wall_e; b.vx *= ground_friction; }
                     else b.y = next_y;
                 }
 
+                // ---- 步骤 4：穿透位置修正求解器 (Baumgarte stabilization) ----
+                // 当两球因数值误差仍然重叠时，按质量比温和地推开
                 for (let i = 0; i < MAX_BALLS; i++) {
                     let b1 = balls[i];
                     if (b1.isDead) continue;
@@ -317,12 +399,14 @@
 
                         if (dist_sq > 0 && dist_sq < min_dist * min_dist) {
                             let dist = Math.sqrt(dist_sq);
-                            let pen = min_dist - dist;
+                            let pen = min_dist - dist;   // 穿透深度
+                            // slop=0.02 容忍微小穿透, percent=0.2 修正比例（太大会抖动）
                             let scalar = Math.max(pen - 0.02, 0.0) / (1.0 / b1.mass + 1.0 / b2.mass) * 0.2;
 
-                            if (dist < 0.0001) { dx = 1; dy = 0; dist = 1; }
+                            if (dist < 0.0001) { dx = 1; dy = 0; dist = 1; } // 防止除零
                             let nx = dx / dist, ny = dy / dist;
 
+                            // 按反质量比分配修正量，重球少动，轻球多动
                             b1.x -= (1.0 / b1.mass) * scalar * nx; b1.y -= (1.0 / b1.mass) * scalar * ny;
                             b2.x += (1.0 / b2.mass) * scalar * nx; b2.y += (1.0 / b2.mass) * scalar * ny;
                         }
@@ -330,6 +414,8 @@
                 }
             }
 
+            // ---- 步骤 5：绝对边界安全锁 ----
+            // 子步进结束后最终钳制，确保没有小球逃出画布
             for (let b of balls) {
                 if (b.isDead) continue;
                 if (b.x < b.r) b.x = b.r; if (b.x > WIDTH - b.r) b.x = WIDTH - b.r;
@@ -337,91 +423,112 @@
             }
         }
 
+        /**
+         * 从对象池中复用一个 "死亡" 小球，赋予随机属性后激活
+         * 新球从画布顶部上方(-r*2)生成，带有随机水平和向下速度
+         */
         function spawnBall() {
             for (let b of balls) {
                 if (b.isDead) {
-                    b.r = Math.random() * 20 + 25;
-                    b.mass = b.r * b.r;
-                    b.x = Math.random() * (WIDTH - b.r * 2) + b.r;
-                    b.y = -b.r * 2;
-                    b.vx = Math.random() * 6 - 3;
-                    b.vy = Math.random() * 4 + 2;
-                    b.colorId = Math.floor(Math.random() * COLORS.length);
-                    b.isDead = false;
-                    break;
+                    b.r = Math.random() * 20 + 25;                   // 半径 25~45
+                    b.mass = b.r * b.r;                              // 质量 ∝ 面积
+                    b.x = Math.random() * (WIDTH - b.r * 2) + b.r;   // X 随机，保证不越界
+                    b.y = -b.r * 2;                                  // 从顶部上方掉落
+                    b.vx = Math.random() * 6 - 3;                    // 水平速度 -3~3
+                    b.vy = Math.random() * 4 + 2;                    // 向下速度 2~6
+                    b.colorId = Math.floor(Math.random() * COLORS.length); // 随机颜色
+                    b.isDead = false;                                // 激活
+                    break;                                           // 每次只生成一个
                 }
             }
         }
 
+        /**
+         * 点击引爆效果：以点击位置为中心，对半径 300 内的所有活球施加径向冲击力
+         * 力度随距离线性衰减：force = 180 × (1 - dist/300)
+         * @param {number} x - 爆炸中心 X 坐标
+         * @param {number} y - 爆炸中心 Y 坐标
+         */
         function applyExplosion(x, y) {
             if (!isPlaying) return;
             for (let b of balls) {
                 if (b.isDead) continue;
-                let dx = b.x - x, dy = b.y - y;
+                let dx = b.x - x, dy = b.y - y;       // 小球相对爆炸中心的偏移
                 let dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist < 1) dist = 1;
-                if (dist < 300) {
-                    let force = 180.0 * (1.0 - dist / 300.0);
-                    b.vx += (dx / dist) * force;
+                if (dist < 1) dist = 1;                 // 防止除零
+                if (dist < 300) {                       // 爆炸影响半径 300px
+                    let force = 180.0 * (1.0 - dist / 300.0); // 线性衰减力度
+                    b.vx += (dx / dist) * force;        // 沿径向施加速度增量
                     b.vy += (dy / dist) * force;
                 }
             }
         }
 
-        // 【修复】将事件绑定到 canvas 上，防止误杀菜单按钮
+        // ---- 输入事件绑定 ----
+        // 绑定到 canvas（而不是 document）上，防止点击菜单按钮时误触发爆炸
         canvas.addEventListener('mousedown', e => applyExplosion(e.clientX, e.clientY));
         canvas.addEventListener('touchstart', e => {
             if (isPlaying) {
-                e.preventDefault();
+                e.preventDefault();   // 阻止移动端默认滚动/缩放行为
                 applyExplosion(e.touches[0].clientX, e.touches[0].clientY);
             }
-        }, { passive: false });
+        }, { passive: false });    // passive:false 才能调用 preventDefault()
 
+        /**
+         * 游戏主循环 (由 requestAnimationFrame 驱动，约 60fps)
+         * 职责：生成小球 → 更新物理 → 渲染画面
+         */
         function gameLoop(timestamp) {
             if (!isPlaying) return;
 
-            let delta = timestamp - lastTime;
+            let delta = timestamp - lastTime;  // 帧间隔（毫秒）
             lastTime = timestamp;
 
+            // ---- 定时生成小球：每 150ms 生成 2 个 ----
             spawnTimer += delta;
             if (spawnTimer > 150) {
-                spawnBall(); spawnBall();
+                spawnBall(); spawnBall();       // 一次生成两个，加速节奏
                 spawnTimer = 0;
             }
 
+            // ---- 倒计时逻辑：每秒减 1 ----
             gameTimer += delta;
             if (gameTimer > 1000) {
                 timeLeft--;
                 document.getElementById('timeTxt').innerText = `TIME: ${timeLeft}s`;
                 gameTimer = 0;
-                if (timeLeft <= 0) endGame();
+                if (timeLeft <= 0) endGame();   // 时间到，结束游戏
             }
 
+            // ---- 执行物理模拟 ----
             updatePhysics();
 
-            ctx.clearRect(0, 0, WIDTH, HEIGHT);
+            // ---- 渲染：清屏 → 绘制小球 → 绘制浮动文字 ----
+            ctx.clearRect(0, 0, WIDTH, HEIGHT); // 清屏
 
+            // 绘制所有存活的小球
             for (let b of balls) {
                 if (b.isDead) continue;
                 ctx.beginPath();
-                ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-                ctx.fillStyle = COLORS[b.colorId];
+                ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);  // 画圆
+                ctx.fillStyle = COLORS[b.colorId];         // 填充对应颜色
                 ctx.fill();
                 ctx.closePath();
             }
 
+            // 绘制浮动得分文字动画（逐渐上浮 + 淡出）
             for (let i = floatingTexts.length - 1; i >= 0; i--) {
                 let ft = floatingTexts[i];
-                ft.life--;
-                ft.y -= 2;
+                ft.life--;                  // 生命递减
+                ft.y -= 2;                  // 每帧向上浮动 2px
                 ctx.font = "bold 24px 'Segoe UI'";
-                ctx.fillStyle = `rgba(51, 204, 153, ${ft.life / 30})`;
+                ctx.fillStyle = `rgba(51, 204, 153, ${ft.life / 30})`; // 透明度随生命值衰减
                 ctx.textAlign = "center";
                 ctx.fillText(ft.text, ft.x, ft.y);
-                if (ft.life <= 0) floatingTexts.splice(i, 1);
+                if (ft.life <= 0) floatingTexts.splice(i, 1); // 生命耗尽则移除
             }
 
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(gameLoop); // 请求下一帧
         }
     </script>
 </body>
