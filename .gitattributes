@@ -1,2 +1,15 @@
-*.tex linguist-vendored
+# 1. 解决大小写问题 (比如 .TEX, .Tex)
+*.[tT][eE][xX] linguist-vendored
+
+# 2. 封杀所有会被 GitHub 算作 TeX 语言的衍生后缀
+*.sty linguist-vendored
+*.cls linguist-vendored
+*.bib linguist-vendored
+*.dtx linguist-vendored
+*.ins linguist-vendored
+
+# 3. 确保多层嵌套文件夹里的文件也能被无视
+**/*.tex linguist-vendored
+**/*.sty linguist-vendored
+
 *.html linguist-vendored
