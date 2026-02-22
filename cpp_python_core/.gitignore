@@ -1,0 +1,5 @@
+# 忽略 PyInstaller 生成的文件夹和文件
+build/
+dist/
+*.spec
+__pycache__/
