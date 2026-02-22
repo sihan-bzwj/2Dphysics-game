@@ -1,3 +1,0 @@
-C:/Users/jh/Desktop/code/2D/build/CMakeFiles/physics_core.dir
-C:/Users/jh/Desktop/code/2D/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/jh/Desktop/code/2D/build/CMakeFiles/ZERO_CHECK.dir
