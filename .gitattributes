@@ -1,7 +1,7 @@
-# 彻底从语言统计中抹除所有 TeX 文件
-*.tex linguist-detectable=false
-*.tex linguist-documentation=true
+# 将所有 .tex 文件伪装成二进制文件，彻底从代码统计中抹除
+*.tex binary
+*.tex -diff
 
-# 确保核心代码被 100% 识别
-*.cpp linguist-detectable=true
-*.py linguist-detectable=true
+# 确保核心代码以文本形式被精确识别
+*.cpp text linguist-detectable=true
+*.py text linguist-detectable=true
